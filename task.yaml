@@ -1,0 +1,65 @@
+
+
+我想开发1个开发工具，用来管理多个paas平台环境。
+需求设计:
+  每个paas平台由一个管理k8s集群和多个业务k8s集群，其中管理集群的配置文件kubeconfig可通过管理集群master节点获取/root/.kube/config文件，业务集群的集群配置文件保存在管理集群的secret中，secret的type为cluster.x-k8s.io/secret，
+secert的名字后缀为-kubeconfig，导入进来后集群的名称为，label中cluster.x-k8s.io/cluster-name的值，平常的主要的操作为切换不同集群，然后操作k8s集群，使用k9s基本上可以满足需求。该工具也使用控制台命令行工具，采用和k9s相同的技术栈。
+产品设计：
+- 1.环境管理
+  - 1.1环境列表:
+    运行时默认展示环境列表界面，加载配置文件的envs环境信息，展示配置，在环境列表页面添加键盘监听:
+    - c： 导入环境
+    - d：删除环境
+    - m：更新环境
+    - return回车：业务集群列表
+    - esc：退出工具
+  - 1.2导入环境：
+    - 1.1 表单输入，ui上有个按钮导入环境，集群导入环境页面，填写一下字段:
+      - name 环境名
+      - id 环境id
+      - createTime 创建时间
+      - updateTime 更新时间
+      - ip 跳板机ip
+      - user 跳板机用户名
+      - pwd 跳板机密码
+      - kubeconfig kubeconfig地址~/.devctl/kubeconfgs/${id}/config
+      点击确认下，先通过跳板机下载当前环境管理集群的/root/.kube/config，到~/.devctl/kubeconfgs/${id}/config
+      然后将环境信息保存到环境配置文件，配置文件为~/.devctl/config.yaml
+      配置文件实例：
+      envs:
+      - id: env1
+        name: rqy-381
+        createTime: "2025-06-23 16:40:09"
+        updateTime: "2025-06-23 20:51:27"
+        ip: 11.50.139.96
+        user: root
+        password: 
+        kubeconfig: ~/.devctl/kubeconfgs/env1/config
+      - id: env2
+        name: rqy-131
+        createTime: "2025-06-23 17:00:16"
+        updateTime: "2025-06-23 17:00:16"
+        ip: 11.50.139.96
+        user: root
+        password: 
+        kubeconfig: ~/.devctl/kubeconfgs/env2/config
+  - 1.3环境删除
+    提示确认后删除，异常配置文件中配置，然后删除集群配置文件。
+  - 3.4环境修改  
+    进入修改页面，仅ip、pwd可修改，提交后，重新下载kubeconfig文件
+- 集群管理
+  选择环境并进入环境中集群管理页面，集群是管理集群和页面集群列表，管理集群名称为gaia
+  - 集群列表：
+    展示该环境下管理集群和业务集群：
+    - 管理集群kubeconfig文件为~/.devctl/kubeconfgs/${id}/config，显示的集群名称默认为gaia
+    - 业务集群实时读取管理集群中业务集群kubeconfig的secret，jd-tpaas命名空间下，type为cluster.x-k8s.io/secret，名称后缀为-kubeconfig，显示的集群id为label中cluster.x-k8s.io/cluster-name的值
+    集群列表添加键盘监听：
+    - 回车：集群操作调用k9s工具操作k8s集群
+      首先，判断是否未gaia集群，是gaia集群，则集群配置文件已下载到本地，直接调用命令：k9s --kubeconfig=~/.devctl/kubeconfgs/${id}/config，
+      如果是业务集群，判断本地文件~/.devctl/kubeconfgs/${id}/${secretName}是否存在，如过不村子，则应先将secret中的kubeconfig文件下载到本地文件并保存，然后调用k9s --kubeconfig=~/.devctl/kubeconfgs/${id}/${secretName}
+    - d: 删除本地集群配置文件，如果是管理集群gaia则不支持删除。业务集群则可以删除。
+    - e: 进入vim编辑页面可编辑配置文件，如果业务集群配置文件不存在，则先下载。
+    - esc: 退出集群列表，返回环境列表
+    — 上，下键：切换集群
+  - 集群操作：
+    在集群列表页，选择集群回车，进入集群操作页面，为k9s，按esc退出k9s返回集群列表页面
