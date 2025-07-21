@@ -2,7 +2,8 @@ package ssh
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -51,14 +52,34 @@ func (c *SSHClient) DownloadFile(remotePath, localPath string) error {
 	}
 	defer session.Close()
 
-	content, err := session.Output(fmt.Sprintf("cat %s", remotePath))
+	// Create a new file for writing
+	localFile, err := os.Create(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to read remote file: %v", err)
+		return fmt.Errorf("failed to create local file: %v", err)
+	}
+	defer localFile.Close()
+
+	// Set up the remote command
+	remoteCmd := fmt.Sprintf("cat %s", remotePath)
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %v", err)
 	}
 
-	err = ioutil.WriteFile(localPath, content, 0600)
+	// Start the remote command
+	if err := session.Start(remoteCmd); err != nil {
+		return fmt.Errorf("failed to start remote command: %v", err)
+	}
+
+	// Copy the output from the remote command to the local file
+	_, err = io.Copy(localFile, stdout)
 	if err != nil {
-		return fmt.Errorf("failed to write local file: %v", err)
+		return fmt.Errorf("failed to write to local file: %v", err)
+	}
+
+	// Wait for the remote command to finish
+	if err := session.Wait(); err != nil {
+		return fmt.Errorf("failed to wait for remote command: %v", err)
 	}
 
 	return nil

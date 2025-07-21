@@ -85,9 +85,16 @@ func (cm *ClusterManager) ListClusters() ([]ClusterInfo, error) {
 		cri, _, _ := unstructured.NestedString(cluster.Object, "spec", "containerRuntime")
 		version, _, _ := unstructured.NestedString(cluster.Object, "spec", "kubernetesVersion")
 		apiServer, _, _ := unstructured.NestedMap(cluster.Object, "spec", "controlPlaneEndpoint")
-		ip, _ := apiServer["url"].(string)
-		port, _ := apiServer["port"].(int)
-		apiServerURL := fmt.Sprintf("%s:%d", ip, port)
+		var apiServerURL string
+		if apiServer != nil {
+			ip, ok := apiServer["url"].(string)
+			if ok {
+				port, ok := apiServer["port"].(int64)
+				if ok {
+					apiServerURL = fmt.Sprintf("%s:%d", ip, port)
+				}
+			}
+		}
 		status, _, _ := unstructured.NestedBool(cluster.Object, "status", "ready")
 		clusters = append(clusters, ClusterInfo{
 			ID:         cluster.GetName(),

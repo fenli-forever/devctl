@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/jd/devctl/cluster"
@@ -15,7 +18,6 @@ import (
 	"github.com/jd/devctl/ssh"
 	"github.com/rivo/tview"
 )
-
 
 type UI struct {
 	app            *tview.Application
@@ -501,15 +503,28 @@ func (ui *UI) openK9s(clusterName string) {
 		ui.handleError(err, fmt.Sprintf("Kubeconfig file not found for cluster %s", clusterName))
 		return
 	}
+	ctx := context.Background()
+	childCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("Received interrupt signal, canceling context")
+		cancel()
+	}()
 
-	cmd := exec.Command("k9s", "--kubeconfig", kubeconfigPath)
-	if err := cmd.Start(); err != nil {
-		ui.handleError(err, "Error starting k9s")
-		return
-	}
+	cmd := exec.CommandContext(childCtx, "k9s", "--kubeconfig", kubeconfigPath, "--logLevel", "debug")
+	cmd.Env = append(os.Environ(), "EDITOR=vim")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	ui.app.Suspend(func() {
-		cmd.Wait()
+		err := cmd.Run()
+		if err != nil {
+			ui.handleError(err, "k9s command failed")
+		}
 	})
 }
 
