@@ -96,13 +96,23 @@ func (ui *UI) createEnvListPage() tview.Primitive {
 			case 'c':
 				ui.showAddEnvironmentForm()
 			case 'd':
-				ui.deleteSelectedEnvironment(table)
+				if selectedRow > 0 && selectedRow <= len(envs) {
+					if envs[selectedRow-1].ID != "default" {
+						ui.deleteSelectedEnvironment(table)
+					}
+				}
 			case 'm':
-				ui.showUpdateEnvironmentForm(table)
+				if selectedRow > 0 && selectedRow <= len(envs) {
+					if envs[selectedRow-1].ID != "default" {
+						ui.showUpdateEnvironmentForm(table)
+					}
+				}
 			case 's':
 				if selectedRow > 0 && selectedRow <= len(envs) {
 					env := envs[selectedRow-1]
-					ui.sshToEnvironment(env)
+					if env.ID != "default" {
+						ui.sshToEnvironment(env)
+					}
 				}
 			}
 		case tcell.KeyUp:

@@ -21,7 +21,22 @@ func NewEnvManager(cfg *config.Config, log *logger.Logger) *EnvManager {
 }
 
 func (em *EnvManager) ListEnvironments() []config.Environment {
-	return em.Config.Envs
+	envs := em.Config.Envs
+	kubeconfigPath := os.Getenv("KUBECONFIG")
+	if kubeconfigPath != "" {
+		defaultEnv := config.Environment{
+			ID:         "default",
+			Name:       "默认",
+			CreateTime: time.Now().Format("2006-01-02 15:04:05"),
+			UpdateTime: time.Now().Format("2006-01-02 15:04:05"),
+			IP:         "-",
+			User:       "-",
+			Password:   "-",
+			Kubeconfig: kubeconfigPath,
+		}
+		envs = append([]config.Environment{defaultEnv}, envs...)
+	}
+	return envs
 }
 
 func (em *EnvManager) AddEnvironment(env config.Environment) error {
