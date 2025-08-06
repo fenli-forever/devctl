@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -17,7 +18,21 @@ func main() {
 	if err != nil {
 		panic("Failed to get user home directory")
 	}
-	logFile := filepath.Join(homeDir, ".devctl", "devctl.log")
+	logDir := filepath.Join(homeDir, ".devctl")
+	logFile := filepath.Join(logDir, "devctl.log")
+	// 确保目录存在
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		panic(fmt.Sprintf("Failed to create log directory: %v", err))
+	}
+	// 确保文件存在
+	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+		if file, err := os.Create(logFile); err != nil {
+			panic(fmt.Sprintf("Failed to create log file: %v", err))
+		} else {
+			file.Close()
+			os.Chmod(logFile, 0644)
+		}
+	}
 	log, err = logger.NewLogger(logger.INFO, logFile)
 	if err != nil {
 		panic("Failed to initialize logger")
