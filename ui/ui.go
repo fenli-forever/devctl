@@ -109,9 +109,8 @@ func (ui *UI) createEnvListPage() tview.Primitive {
 				}
 			case 's':
 				if selectedRow > 0 && selectedRow <= len(envs) {
-					env := envs[selectedRow-1]
-					if env.ID != "default" {
-						ui.sshToEnvironment(env)
+					if envs[selectedRow-1].ID != "default" {
+						ui.sshToEnvironment(envs[selectedRow-1])
 					}
 				}
 			}

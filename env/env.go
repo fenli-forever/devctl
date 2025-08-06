@@ -21,22 +21,45 @@ func NewEnvManager(cfg *config.Config, log *logger.Logger) *EnvManager {
 }
 
 func (em *EnvManager) ListEnvironments() []config.Environment {
-	envs := em.Config.Envs
-	kubeconfigPath := os.Getenv("KUBECONFIG")
-	if kubeconfigPath != "" {
-		defaultEnv := config.Environment{
-			ID:         "default",
-			Name:       "默认",
-			CreateTime: time.Now().Format("2006-01-02 15:04:05"),
-			UpdateTime: time.Now().Format("2006-01-02 15:04:05"),
-			IP:         "-",
-			User:       "-",
-			Password:   "-",
-			Kubeconfig: kubeconfigPath,
+	return em.Config.Envs
+}
+
+func (em *EnvManager) AddDefaultEnvironment() {
+	// Check if default environment already exists
+	for _, env := range em.Config.Envs {
+		if env.ID == "default" {
+			return
 		}
-		envs = append([]config.Environment{defaultEnv}, envs...)
 	}
-	return envs
+
+	// Check for KUBECONFIG env var or ~/.kube/config file
+	kubeconfigPath := os.Getenv("KUBECONFIG")
+	if kubeconfigPath == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			kubeconfigPath = filepath.Join(home, ".kube", "config")
+			if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+				return
+			}
+		}
+	}
+
+	defaultEnv := config.Environment{
+		ID:         "default",
+		Name:       "默认",
+		CreateTime: time.Now().Format("2006-01-02 15:04:05"),
+		UpdateTime: time.Now().Format("2006-01-02 15:04:05"),
+		IP:         "--",
+		User:       "--",
+		Password:   "--",
+		Kubeconfig: kubeconfigPath,
+	}
+
+	em.Config.Envs = append([]config.Environment{defaultEnv}, em.Config.Envs...)
+	err := config.SaveConfig(em.Config, em.log)
+	if err != nil {
+		em.log.Error("Failed to save config after adding default environment: %v", err)
+	}
 }
 
 func (em *EnvManager) AddEnvironment(env config.Environment) error {

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jd/devctl/config"
+	"github.com/jd/devctl/env"
 	"github.com/jd/devctl/logger"
 	"github.com/jd/devctl/ui"
 )
@@ -45,9 +46,14 @@ func main() {
 	cfg, err := config.LoadConfig(log)
 	if err != nil {
 		log.Error("Error loading config: %v", err)
+		fmt.Printf("Error loading config: %v\n", err)
 		log.Info("Using empty config")
 		cfg = &config.Config{} // Use empty config if loading fails
 	}
+
+	// Add default environment if it doesn't exist
+	envManager := env.NewEnvManager(cfg, log)
+	envManager.AddDefaultEnvironment()
 
 	// Initialize UI
 	ui := ui.NewUI(cfg, log)
@@ -56,6 +62,7 @@ func main() {
 	// Run UI
 	if err := ui.Run(); err != nil {
 		log.Error("Error running UI: %v", err)
+		fmt.Printf("Error running UI: %v\n", err)
 		os.Exit(1)
 	}
 
