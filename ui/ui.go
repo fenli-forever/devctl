@@ -624,7 +624,7 @@ func (ui *UI) showAddClusterForm() {
 func (ui *UI) sshToEnvironment(env config.Environment) {
 	ui.log.Info("Connecting to environment: %s", env.Name)
 
-	cmd := exec.Command("sshpass", "-p", env.Password, "ssh", fmt.Sprintf("%s@%s", env.User, env.IP))
+	cmd := exec.Command("sshpass", "-p", env.Password, "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", fmt.Sprintf("%s@%s", env.User, env.IP))
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
