@@ -117,11 +117,13 @@ func (ui *UI) createEnvListPage() tview.Primitive {
 		case tcell.KeyUp:
 			if selectedRow > 1 {
 				selectedRow--
+				table.Select(selectedRow, 0)
 				refreshTable()
 			}
 		case tcell.KeyDown:
 			if selectedRow < len(envs) {
 				selectedRow++
+				table.Select(selectedRow, 0)
 				refreshTable()
 			}
 		case tcell.KeyEnter:

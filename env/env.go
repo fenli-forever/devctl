@@ -135,28 +135,30 @@ func (em *EnvManager) DeleteEnvironment(id string) error {
 	em.log.Info("Deleting environment: %s", id)
 	for i, e := range em.Config.Envs {
 		if e.ID == id {
-			// Remove the associated kubeconfig directory before changing the config
-			home, err := os.UserHomeDir()
-			if err != nil {
-				em.log.Error("Failed to get user home directory: %v", err)
-				return fmt.Errorf("failed to get user home directory: %w", err)
-			}
-			kubeconfigDir := filepath.Join(home, ".devctl", "kubeconfigs", id)
-			if _, err := os.Stat(kubeconfigDir); !os.IsNotExist(err) {
-				em.log.Info("Removing kubeconfig directory: %s", kubeconfigDir)
-				if err := os.RemoveAll(kubeconfigDir); err != nil {
-					em.log.Error("Failed to remove kubeconfig directory %s: %v", kubeconfigDir, err)
-					return fmt.Errorf("failed to remove kubeconfig directory: %w", err)
-				}
-				em.log.Info("Kubeconfig directory %s removed successfully", kubeconfigDir)
-			}
-
+			// First, remove the environment from the config and save it.
 			em.Config.Envs = append(em.Config.Envs[:i], em.Config.Envs[i+1:]...)
 			if err := config.SaveConfig(em.Config, em.log); err != nil {
 				em.log.Error("Failed to save config after deleting environment: %v", err)
+				// If saving fails, the deletion is aborted.
 				return err
 			}
-			em.log.Info("Environment %s deleted successfully", id)
+			em.log.Info("Environment %s removed from config successfully", id)
+
+			// Then, remove the associated kubeconfig directory.
+			home, err := os.UserHomeDir()
+			if err != nil {
+				em.log.Error("Failed to get user home directory, cannot remove kubeconfig dir: %v", err)
+			} else {
+				kubeconfigDir := filepath.Join(home, ".devctl", "kubeconfigs", id)
+				em.log.Info("Removing kubeconfig directory: %s", kubeconfigDir)
+				if err := os.RemoveAll(kubeconfigDir); err != nil {
+					em.log.Error("Failed to remove kubeconfig directory %s: %v", kubeconfigDir, err)
+					// Do not return an error, just log it. The main task (config deletion) is done.
+				} else {
+					em.log.Info("Kubeconfig directory %s removed successfully", kubeconfigDir)
+				}
+			}
+
 			return nil
 		}
 	}
