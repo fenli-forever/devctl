@@ -460,6 +460,17 @@ func (ui *UI) showClusterListPage() {
 				ui.editSelectedCluster(table)
 			case 'q':
 				showSearchBox()
+			case 's':
+				row, _ := table.GetSelection()
+				clustersToShow := clusters
+				if len(filteredClusters) > 0 {
+					clustersToShow = filteredClusters
+				}
+				if row > 0 && row <= len(clustersToShow) {
+					clusterInfo := clustersToShow[row-1]
+					ui.log.Info("DEBUG: Preparing to show node list for cluster ID: %s, Name: %s", clusterInfo.ID, clusterInfo.Name)
+					ui.showNodeListPage(clusterInfo)
+				}
 			}
 		case tcell.KeyUp:
 			if selectedRow > 1 {
@@ -472,8 +483,12 @@ func (ui *UI) showClusterListPage() {
 				refreshTable()
 			}
 		case tcell.KeyEnter:
-			if selectedRow > 0 && selectedRow <= len(clusters) {
-				clusterInfo := clusters[selectedRow-1]
+			clustersToShow := clusters
+			if len(filteredClusters) > 0 {
+				clustersToShow = filteredClusters
+			}
+			if selectedRow > 0 && selectedRow <= len(clustersToShow) {
+				clusterInfo := clustersToShow[selectedRow-1]
 				ui.openK9s(clusterInfo.ID)
 			}
 		}
@@ -496,10 +511,114 @@ func (ui *UI) showClusterListPage() {
 	ui.pages.SwitchToPage("clusterList")
 }
 
+func (ui *UI) showNodeListPage(clusterInfo cluster.ClusterInfo) {
+	ui.log.Info("Showing node list for cluster %s", clusterInfo.Name)
+
+	nodes, err := ui.clusterManager.ListClusterNodes(clusterInfo.ID)
+	if err != nil {
+		ui.handleError(err, "Error listing nodes")
+		return
+	}
+
+	table := tview.NewTable().
+		SetBorders(true)
+
+	headers := []string{"Node Name", "Internal IP"}
+	for i, header := range headers {
+		table.SetCell(0, i, tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetExpansion(1.0))
+	}
+	selectedRow := 1
+
+	refreshTable := func() {
+		table.Clear()
+		for i, header := range headers {
+			table.SetCell(0, i, tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetExpansion(1.0))
+		}
+		for i, node := range nodes {
+			cells := []string{node.Name, node.IP}
+			for j, cell := range cells {
+				tableCell := tview.NewTableCell(cell)
+				if i+1 == selectedRow {
+					tableCell.SetTextColor(tcell.ColorBlack).SetBackgroundColor(tcell.ColorWhite)
+				} else {
+					tableCell.SetTextColor(tcell.ColorWhite).SetBackgroundColor(tcell.ColorBlack)
+				}
+				table.SetCell(i+1, j, tableCell)
+			}
+		}
+	}
+
+	refreshTable()
+
+	table.Select(selectedRow, 0).SetFixed(1, 0).SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			ui.pages.RemovePage("nodeList")
+			ui.pages.SwitchToPage("clusterList")
+		}
+	})
+
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp:
+			if selectedRow > 1 {
+				selectedRow--
+				table.Select(selectedRow, 0)
+				refreshTable()
+			}
+		case tcell.KeyDown:
+			if selectedRow < len(nodes) {
+				selectedRow++
+				table.Select(selectedRow, 0)
+				refreshTable()
+			}
+		case tcell.KeyEnter:
+			if selectedRow > 0 && selectedRow <= len(nodes) {
+				nodeInfo := nodes[selectedRow-1]
+				ui.sshToNode(nodeInfo.IP)
+			}
+		}
+		return event
+	})
+	title := fmt.Sprintf("节点列表 - %s (%d)", clusterInfo.Name, len(nodes))
+	frame := tview.NewFrame(table).
+		SetBorders(0, 0, 0, 0, 0, 0).
+		AddText(title, true, tview.AlignCenter, tcell.ColorWhite)
+
+	// Re-use cluster info bar
+	infoBar := ui.createClusterInfoBar()
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(infoBar, 5, 1, false).
+		AddItem(frame, 0, 1, true)
+
+	ui.pages.AddPage("nodeList", flex, true, true)
+}
+
+func (ui *UI) sshToNode(nodeIP string) {
+	env, err := ui.envManager.GetEnvironment(ui.currentEnvID)
+	if err != nil {
+		ui.handleError(err, "Failed to get environment for SSH")
+		return
+	}
+
+	ui.log.Info("Connecting to node: %s with user %s", nodeIP, env.User)
+
+	cmd := exec.Command("sshpass", "-p", env.Password, "ssh", "-o", "StrictHostKeyChecking=no", fmt.Sprintf("%s@%s", env.User, nodeIP))
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	ui.app.Suspend(func() {
+		err := cmd.Run()
+		if err != nil {
+			ui.log.Error("Failed to connect to node: %v", err)
+		}
+	})
+}
+
 func (ui *UI) openK9s(clusterName string) {
 	var kubeconfigPath string
 	var err error
-
 	if clusterName == "gaia" {
 		kubeconfigPath = filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", ui.currentEnvID, "config")
 	} else {

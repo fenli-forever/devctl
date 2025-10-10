@@ -48,6 +48,50 @@ type ClusterInfo struct {
 	Status     string
 }
 
+type NodeInfo struct {
+	Name string
+	IP   string
+}
+
+func (cm *ClusterManager) ListClusterNodes(clusterName string) ([]NodeInfo, error) {
+	cm.log.Info("Listing nodes for cluster: %s", clusterName)
+
+	kubeconfigPath, err := cm.GetKubeconfig(clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubeconfig for cluster %s: %v", clusterName, err)
+	}
+
+	clientset, err := cm.getClientset(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get clientset for cluster %s: %v", clusterName, err)
+	}
+
+	nodeList, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list nodes for cluster %s: %v", clusterName, err)
+	}
+
+	var nodes []NodeInfo
+	for _, node := range nodeList.Items {
+		var internalIP string
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				internalIP = addr.Address
+				break
+			}
+		}
+		if internalIP != "" {
+			nodes = append(nodes, NodeInfo{
+				Name: node.Name,
+				IP:   internalIP,
+			})
+		}
+	}
+
+	cm.log.Info("Found %d nodes for cluster %s", len(nodes), clusterName)
+	return nodes, nil
+}
+
 func (cm *ClusterManager) ListClusters() ([]ClusterInfo, error) {
 	cm.log.Info("Listing clusters")
 
