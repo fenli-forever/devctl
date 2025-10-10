@@ -475,11 +475,17 @@ func (ui *UI) showClusterListPage() {
 		case tcell.KeyUp:
 			if selectedRow > 1 {
 				selectedRow--
+				table.Select(selectedRow, 0)
 				refreshTable()
 			}
 		case tcell.KeyDown:
-			if selectedRow < len(clusters) {
+			clustersToShow := clusters
+			if len(filteredClusters) > 0 {
+				clustersToShow = filteredClusters
+			}
+			if selectedRow < len(clustersToShow) {
 				selectedRow++
+				table.Select(selectedRow, 0)
 				refreshTable()
 			}
 		case tcell.KeyEnter:
