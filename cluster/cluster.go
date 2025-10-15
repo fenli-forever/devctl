@@ -191,7 +191,21 @@ func (cm *ClusterManager) ListClusterSecrets() ([]string, error) {
 }
 
 func (cm *ClusterManager) GetKubeconfig(clusterName string) (string, error) {
-	cm.log.Info("Getting kubeconfig for cluster: %s", clusterName)
+	cm.log.Info("Attempting to get kubeconfig for cluster: %s", clusterName)
+
+	// Define the local cache path
+	localPath := filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", cm.EnvID, clusterName)
+	if clusterName == "gaia" {
+		localPath = filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", cm.EnvID, "config")
+	}
+
+	// Check if a cached version exists
+	if _, err := os.Stat(localPath); err == nil {
+		cm.log.Info("Using cached kubeconfig for cluster '%s' from: %s", clusterName, localPath)
+		return localPath, nil
+	}
+
+	cm.log.Info("No cached kubeconfig found. Fetching from source for cluster: %s", clusterName)
 	env, err := cm.getEnvironment()
 	if err != nil {
 		cm.log.Error("Failed to get environment: %v", err)
@@ -203,7 +217,6 @@ func (cm *ClusterManager) GetKubeconfig(clusterName string) (string, error) {
 		// Download the kubeconfig file from the management cluster
 		sshClient := ssh.NewSSHClient(env.IP, env.User, env.Password)
 		remotePath := "/root/.kube/config"
-		localPath := filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", cm.EnvID, "config")
 
 		if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 			cm.log.Error("Failed to create directory: %v", err)
@@ -215,7 +228,7 @@ func (cm *ClusterManager) GetKubeconfig(clusterName string) (string, error) {
 			return "", fmt.Errorf("failed to download kubeconfig: %v", err)
 		}
 
-		cm.log.Info("Kubeconfig downloaded successfully")
+		cm.log.Info("Kubeconfig downloaded successfully to: %s", localPath)
 		return localPath, nil
 	}
 
@@ -237,19 +250,18 @@ func (cm *ClusterManager) GetKubeconfig(clusterName string) (string, error) {
 		return "", fmt.Errorf("kubeconfig not found in secret")
 	}
 
-	kubeconfigPath := filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", cm.EnvID, clusterName)
-	if err := os.MkdirAll(filepath.Dir(kubeconfigPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 		cm.log.Error("Failed to create directory: %v", err)
 		return "", fmt.Errorf("failed to create directory: %v", err)
 	}
 
-	if err := ioutil.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
+	if err := ioutil.WriteFile(localPath, kubeconfig, 0600); err != nil {
 		cm.log.Error("Failed to write kubeconfig: %v", err)
 		return "", fmt.Errorf("failed to write kubeconfig: %v", err)
 	}
 
-	cm.log.Info("Kubeconfig saved successfully")
-	return kubeconfigPath, nil
+	cm.log.Info("Kubeconfig saved successfully to: %s", localPath)
+	return localPath, nil
 }
 
 func (cm *ClusterManager) getEnvironment() (*config.Environment, error) {

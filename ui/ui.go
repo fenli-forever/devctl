@@ -179,6 +179,8 @@ func (ui *UI) createClusterInfoBar() tview.Primitive {
 	help := strings.Builder{}
 	help.WriteString("操作说明:\n")
 	help.WriteString("q: 查询\n")
+	help.WriteString("r: 刷新缓存\n")
+	help.WriteString("s: ssh登录节点\n")
 	help.WriteString("Enter: 进入k9s界面\n")
 	help.WriteString("Esc: 退出\n")
 
@@ -195,9 +197,17 @@ func (ui *UI) createClusterInfoBar() tview.Primitive {
 }
 
 func (ui *UI) loadBanner() string {
-	content, err := os.ReadFile("banner.txt")
+	exePath, err := os.Executable()
 	if err != nil {
-		ui.log.Error("Failed to load banner: %v", err)
+		ui.log.Error("Failed to get executable path: %v", err)
+		return "DevCtl"
+	}
+	dir := filepath.Dir(exePath)
+	bannerPath := filepath.Join(dir, "banner.txt")
+
+	content, err := os.ReadFile(bannerPath)
+	if err != nil {
+		ui.log.Error("Failed to load banner from %s: %v", bannerPath, err)
 		return "DevCtl"
 	}
 	return string(content)
@@ -460,6 +470,26 @@ func (ui *UI) showClusterListPage() {
 				ui.editSelectedCluster(table)
 			case 'q':
 				showSearchBox()
+			case 'r':
+				row, _ := table.GetSelection()
+				clustersToShow := clusters
+				if len(filteredClusters) > 0 {
+					clustersToShow = filteredClusters
+				}
+				if row > 0 && row <= len(clustersToShow) {
+					clusterInfo := clustersToShow[row-1]
+					kubeconfigPath := filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", ui.currentEnvID, clusterInfo.ID)
+					if clusterInfo.ID == "gaia" {
+						kubeconfigPath = filepath.Join(os.Getenv("HOME"), ".devctl", "kubeconfigs", ui.currentEnvID, "config")
+					}
+					if err := os.Remove(kubeconfigPath); err == nil {
+						ui.showSuccessModal(fmt.Sprintf("Kubeconfig cache for '%s' cleared.", clusterInfo.Name))
+					} else if os.IsNotExist(err) {
+						ui.showInfoModal(fmt.Sprintf("No cache to clear for '%s'.", clusterInfo.Name))
+					} else {
+						ui.handleError(err, "Failed to clear kubeconfig cache")
+					}
+				}
 			case 's':
 				row, _ := table.GetSelection()
 				clustersToShow := clusters
